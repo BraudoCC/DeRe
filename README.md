@@ -9,7 +9,7 @@ DeReF (Deconstruction and Reconstruction Framework) is an adaptive framework des
 ## 🌟 Framework Overview
 
 <p align="center">
-  <img src="figures/DeRe-ICML-fig1-black.png" width="90%">
+  <img src="figures/DeReF-Framework.png" width="90%">
 </p>
 
 **The Overview of the DeReF framework.** The pipeline begins with **Deconstruction**, breaking monolithic models into functional components. In **Reconstruction**, deep meta-features guide the adaptive constructor to assemble optimal configurations for target data.
@@ -31,7 +31,7 @@ DeReF (Deconstruction and Reconstruction Framework) is an adaptive framework des
 ## 🛠️ Methodology: Predictability-Aware Meta-Features
 
 <p align="center">
-  <img src="figures/DeRe-ICML-fig2-kuang2.png" width="85%">
+  <img src="figures/DeReF-Pipeline.png" width="85%">
 </p>
 
 **Pipeline of Predictability-Aware Meta-Feature Extraction.** This module transforms continuous series into discretized classification tasks, leveraging the in-context learning capability of **TabPFN**. We extract dense embeddings from the frozen encoder, capturing intrinsic input-output mapping logic. These representations serve as robust proxies for zero-shot architectural recommendation.
