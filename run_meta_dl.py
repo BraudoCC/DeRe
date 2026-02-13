@@ -33,7 +33,6 @@ def set_seed(seed):
     torch.backends.cudnn.benchmark = False
 
 def parse_path(path):
-    # '/data2/coding/tsgym/TSGym_benchmark/results_long_term_forecasting/resultsGym_MLP/ETTh1/LTF_TSGym1000000_False_False_DishTS_DFT_False_series-encoding_MLP_DNN_null_True_False_False_ETTh1_ftM_sl96_ll48_pl192_dm64_el2_dl1_df256_fc3_ebtimeF_dtTrue_Exp_epochs30_lfHUBER_lr0.0001_lrscosine_0'
     tsgym_name = path.split("/")[-1]
     compoents_list = tsgym_name.split("ftM")[0].split("_")[2:-1]
     # ['False', 'False', 'DishTS', 'DFT', 'False', 'series-encoding', 'MLP', 'DNN', 'null', 'True', 'False', 'False', 'ETTh1']
@@ -82,13 +81,13 @@ class Meta():
                  early_stopping=True,
                  batch_size=128,
                  d_model=64,
-                 n_layers=2,  # meta-learner层数 (MLP和ICL共用)
-                 nhead=4,     # ICL的attention头数
-                 dropout=0.1, # dropout比例
+                 n_layers=2,  
+                 nhead=4,     
+                 dropout=0.1, 
                  weight_decay=0.001,
                  lr=0.001,
                  epochs=100,
-                 es_tol=5,  # 早停容忍度
+                 es_tol=5,  
                  read_results_root: str='./results_long_term_forecasting',
                  write_results_root: str='./meta/results_long_term_forecasting',
                  ensemble_enabled: bool=False,
@@ -105,7 +104,7 @@ class Meta():
                  save_attention: bool=False,
                  k: float=0.0,
                  temporal: float=1.0,
-                 suffix: str=''):  # rank聚合方式: mean/median/trimmed_mean/voting; save_attention: 保存ICL attention weights
+                 suffix: str=''):  
         self.seed = seed
         self.task_name = task_name
         self.utils = Utils()
@@ -119,7 +118,6 @@ class Meta():
         self.icl_shuffle = icl_shuffle
         self.icl_batch = icl_batch
         self.save_attention = save_attention
-        # ICL-specific hyperparameters
         self.k = k
         self.temporal = temporal
         self.suffix = suffix
@@ -132,16 +130,13 @@ class Meta():
         self.lr = lr
         self.epochs = epochs
         self.es_tol = es_tol
-        # read from original large-scale results, write new reruns to isolated directory
         self.read_results_root = read_results_root.rstrip('/')
         self.write_results_root = write_results_root.rstrip('/')
         self.ensemble_enabled = ensemble_enabled
         self.meta_run_script = meta_run_script
-        # parallel + GPU assignment
         self.cuda_devices = [d.strip() for d in str(cuda_devices).split(',') if d.strip() != '']
         self.parallel_workers = parallel_workers if parallel_workers and parallel_workers > 0 else len(self.cuda_devices)
 
-        # 保存超参数字典，用于后续保存
         self.hyperparams = {
             'seed': seed,
             'batch_size': batch_size,
@@ -161,7 +156,6 @@ class Meta():
             'temporal': temporal,
             'suffix': suffix,
         }
-        # Note: nhead is now included above (was missing before)
 
     def components_processing(self, task_name, datasets, test_dataset, meta_feature_type,
                               pred_len_1=96, pred_len_2=24,
@@ -185,10 +179,6 @@ class Meta():
                               arg_add_GRU=False,
                               arg_all_periods=False,
                               clip_timestamps=False):
-        """
-        处理组件数据，为K折训练准备数据。
-        主要变化：按数据集存储数据，便于后续K折划分。
-        """
         self.pred_len_1, self.pred_len_2 = pred_len_1, pred_len_2
         self.clip_timestamps = clip_timestamps
         
@@ -204,7 +194,6 @@ class Meta():
         self.test_dataset = test_dataset
         self.meta_feature_type = meta_feature_type
         
-        # read paths come from original large-scale experiments
         base_root_read = self.read_results_root
         result_path_MLP = result_path_MLP or os.path.join(base_root_read, 'resultsGym_MLP')
         result_path_GRU = result_path_GRU or os.path.join(base_root_read, 'resultsGym_GRU')
@@ -212,16 +201,14 @@ class Meta():
         result_path_LLM = result_path_LLM or os.path.join(base_root_read, 'resultsGym_LLM')
         result_path_TSFM = result_path_TSFM or os.path.join(base_root_read, 'resultsGym_TSFM')
         
-        # Filter files by modification time (before Jan 9th 2026)
         import datetime
         self.cutoff_time = datetime.datetime(2026, 1, 18, 0, 0, 0).timestamp()
         logging.info(f'cutoff_time: {self.cutoff_time}')
         file_dict = {}
-        file_dict_GRU = {}   # Separate dict for GRU (no completeness filtering)
-        file_dict_Transformer = {}  # Separate dict for Transformer (no completeness filtering)
+        file_dict_GRU = {} 
+        file_dict_Transformer = {}
         
         for dataset in datasets:
-            # MLP files
             d_path = os.path.join(result_path_MLP, dataset)
             if os.path.exists(d_path):
                 if clip_timestamps and dataset != test_dataset:
@@ -268,7 +255,6 @@ class Meta():
 
             logging.info(f"{dataset}: {len(file_dict[dataset])} MLP files before cutoff time.")
             
-            # GRU files (load all, no completeness filtering later)
             if arg_add_GRU:
                 d_path_gru = os.path.join(result_path_GRU, dataset)
                 if os.path.exists(d_path_gru):
@@ -277,7 +263,6 @@ class Meta():
                     file_dict_GRU[dataset] = []
                 logging.info(f"{dataset}: {len(file_dict_GRU[dataset])} GRU files loaded (no completeness filter).")
             
-            # Transformer files (load all, no completeness filtering later)
             if arg_add_transformer:
                 d_path_trans = os.path.join(result_path_transformer, dataset)
                 if os.path.exists(d_path_trans):
@@ -286,26 +271,20 @@ class Meta():
                     file_dict_Transformer[dataset] = []
                 logging.info(f"{dataset}: {len(file_dict_Transformer[dataset])} Transformer files loaded (no completeness filter).")
         
-        # =================== 基于组合完整性的筛选 ===================
-        # 只保留四个预测长度都完成的组合，并按数据集限制数量
         logger.info("Filtering combinations by completeness (all 4 pred_lens required)...")
         
-        # 定义每个数据集的最大组合数
-        max_combos_per_dataset = {'traffic': 250, 'ECL': 250}  # Traffic和ECL取250个
-        default_max_combos = 500  # 其他数据集取500个
+        max_combos_per_dataset = {'traffic': 250, 'ECL': 250}  
+        default_max_combos = 500 
         
         file_dict_filtered = {}
         for dataset in file_dict.keys():
             files = file_dict[dataset]
             
-            # 按 TSGym ID 和 pred_len 分组
-            tsgym_predlens = {}  # {tsgym_id: set(pred_lens)}
-            tsgym_files = {}     # {tsgym_id: [files]}
+            tsgym_predlens = {}
+            tsgym_files = {}
             
             for f in files:
-                # 提取 TSGym ID
                 id_match = re.search(r'(TSGym\d+)', f)
-                # 提取 pred_len
                 pl_match = re.search(r'_pl(\d+)_', f)
                 
                 if id_match and pl_match:
@@ -318,30 +297,24 @@ class Meta():
                     tsgym_predlens[tsgym_id].add(pl)
                     tsgym_files[tsgym_id].append(f)
             
-            # 根据数据集确定需要的四个 pred_len
             if dataset in ['ili', 'nyse', 'nasdaq']:
                 required_pls = {24, 36, 48, 60}
             else:
                 required_pls = {96, 192, 336, 720}
             
-            # 筛选出四个 pred_len 都有的 TSGym ID
             complete_tsgym_ids = [tid for tid, pls in tsgym_predlens.items()
                                   if required_pls.issubset(pls)]
             
-            # 按 TSGym ID 数字排序
             def extract_tsgym_num(tid):
                 match = re.search(r'TSGym(\d+)', tid)
                 return int(match.group(1)) if match else float('inf')
             
             complete_tsgym_ids_sorted = sorted(complete_tsgym_ids, key=extract_tsgym_num)
             
-            # 确定该数据集的最大数量
             max_combos = max_combos_per_dataset.get(dataset, default_max_combos)
             
-            # 取前N个完整的 TSGym ID
             selected_tsgym_ids = set(complete_tsgym_ids_sorted[:max_combos])
             
-            # 只保留这些 TSGym ID 对应的文件
             filtered_files = []
             for tid in selected_tsgym_ids:
                 if tid in tsgym_files:
@@ -358,7 +331,6 @@ class Meta():
         logger.info(f"After completeness filtering: {sum([len(_) for _ in file_dict.values()])} total files")
         
         if arg_all_periods:
-            # 当 arg_all_periods=True 时：训练集保留所有 pred_len，测试集只用当前 pred_len
             file_dict_test = {k: [_ for _ in v if f'pl{pred_len_2}' in _] if k in ['ili','nyse','nasdaq'] 
                             else [_ for _ in v if f'pl{pred_len_1}' in _] for k, v in file_dict.items()}
         else:
@@ -368,7 +340,6 @@ class Meta():
 
         logger.info(f'number of combinations: {sum([len(_) for _ in file_dict.values()])}')
 
-        # Limit file_dict by max_size if specified
         if self.max_size is not None:
             logger.info(f'Limiting results pool to max_size={self.max_size} by TSGym ID')
             file_dict_limited = {}
@@ -387,7 +358,6 @@ class Meta():
             file_dict = file_dict_limited
             logger.info(f'After max_size limit: {sum([len(_) for _ in file_dict.values()])} combinations')
             if arg_all_periods:
-                # 当 arg_all_periods=True 时，测试集只用当前 pred_len
                 file_dict_test = {k: [_ for _ in v if f'pl{pred_len_2}' in _] if k in ['ili','nyse','nasdaq'] 
                                 else [_ for _ in v if f'pl{pred_len_1}' in _] for k, v in file_dict.items()}
             else:
@@ -401,8 +371,6 @@ class Meta():
             file_dict = file_dict_resample
             logger.info(f'After balance: {sum([len(_) for _ in file_dict.values()])}')
 
-        # =================== Merge GRU/Transformer files (no completeness filtering) ===================
-        # These pools have incomplete experiments, so we only filter by pred_len
         if arg_add_GRU and file_dict_GRU:
             logger.info("Merging GRU files (filtered by pred_len only, no completeness check)...")
             for dataset in file_dict_GRU.keys():
@@ -422,7 +390,6 @@ class Meta():
             logger.info("Merging Transformer files (filtered by pred_len only, no completeness check)...")
             for dataset in file_dict_Transformer.keys():
                 trans_files = file_dict_Transformer[dataset]
-                # Filter by pred_len
                 if dataset in ['ili', 'nyse', 'nasdaq']:
                     trans_files_filtered = [f for f in trans_files if f'pl{pred_len_2}' in f]
                 else:
@@ -435,7 +402,6 @@ class Meta():
         
         logger.info(f'After merging GRU/Transformer: {sum([len(_) for _ in file_dict.values()])} total files')
         
-        # Also update file_dict_test if GRU/Transformer is added
         if arg_add_GRU or arg_add_transformer:
             if arg_all_periods:
                 file_dict_test = {k: [_ for _ in v if f'pl{pred_len_2}' in _] if k in ['ili','nyse','nasdaq'] 
@@ -443,7 +409,6 @@ class Meta():
             else:
                 file_dict_test = file_dict.copy()
 
-        # load meta features
         meta_feature_path = os.path.join(meta_feature_path, f"meta_feature_dict_{meta_feature_type}.npz")
         meta_features = np.load(meta_feature_path, allow_pickle=True)
         self.name_dict = {dataset: dataset for dataset in datasets}
@@ -456,7 +421,6 @@ class Meta():
         assert len(set([v.shape for v in self.meta_features.values()])) == 1
         self.meta_feature_dim = list(self.meta_features.values())[0].shape[0]
         
-        # z-score on different datasets
         mu = np.nanmean(np.stack(list(self.meta_features.values())), axis=0)
         std = np.nanstd(np.stack(list(self.meta_features.values())), axis=0)
         self.meta_features = {k: (v - mu) / (std + 1e-6) for k,v in self.meta_features.items()}
@@ -464,7 +428,6 @@ class Meta():
         self.meta_features = {k: np.where(np.isnan(v), 0, v) for k, v in self.meta_features.items()}
         assert (~np.isnan(np.stack(list(self.meta_features.values())))).all()
         
-        # training datasets and testing dataset
         datasets_train = [_ for _ in datasets if _ != test_dataset]
         if not arg_add_new_dataset:
             datasets_train = [_ for _ in datasets_train if _ not in ['covid-19', 'fred-md']]
@@ -472,24 +435,20 @@ class Meta():
         dataset_test = [_ for _ in datasets if _ == test_dataset][0]
         logger.info(f'training datasets: {datasets_train}, testing dataset: {dataset_test}')
         
-        # load components - start with base, then merge additional components
         with open(components_path, 'r') as f:
             self.components = yaml.safe_load(f)
         
-        # Merge Transformer components (extend lists for each key)
         if arg_add_transformer:
             with open(components_add_Transformer_path, 'r') as f:
                 trans_components = yaml.safe_load(f)
             for k, v in trans_components.items():
                 if k in self.components:
-                    # Extend existing list with new values (avoiding duplicates)
                     existing = set(self.components[k])
                     self.components[k] = self.components[k] + [x for x in v if x not in existing]
                 else:
                     self.components[k] = v
             logger.info(f"Merged Transformer components from {components_add_Transformer_path}")
         
-        # Merge GRU components
         if arg_add_GRU:
             with open(components_add_GRU_path, 'r') as f:
                 gru_components = yaml.safe_load(f)
@@ -501,7 +460,6 @@ class Meta():
                     self.components[k] = v
             logger.info(f"Merged GRU components from {components_add_GRU_path}")
         
-        # Merge LLM components
         if arg_add_LLM:
             with open(components_add_LLM_path, 'r') as f:
                 llm_components = yaml.safe_load(f)
@@ -513,7 +471,6 @@ class Meta():
                     self.components[k] = v
             logger.info(f"Merged LLM components from {components_add_LLM_path}")
         
-        # Merge TSFM components    
         if arg_add_TSFM:
             with open(components_add_TSFM_path, 'r') as f:
                 tsfm_components = yaml.safe_load(f)
@@ -528,7 +485,6 @@ class Meta():
         if self.arg_all_periods:
             self.components['gym_pl'] = ['24', '36', '48', '60'] + ['96', '192', '336', '720']
         
-        # 创建并保存LabelEncoders
         self.label_encoders = {}
         components_encoded = {}
         for k, v in self.components.items():
@@ -538,9 +494,7 @@ class Meta():
             components_encoded[k] = {kk: vv for kk, vv in zip(v, le.transform(v))}
         self.components = components_encoded
 
-        # =================== 按数据集存储数据 ===================
-        # 为K折训练准备：按数据集分别存储组件、meta-features和targets
-        self.dataset_data = {}  # {dataset_name: {'components': [], 'meta_features': [], 'targets': [], 'names': []}}
+        self.dataset_data = {}
         
         for dataset in file_dict.keys():
             dataset_components = []
@@ -568,7 +522,6 @@ class Meta():
                 except FileNotFoundError:
                     continue
                 
-                # 跳过nan值的样本（实验可能失败或未完成）
                 if np.isnan(metric_value):
                     continue
                 
@@ -609,9 +562,7 @@ class Meta():
                 }
                 logger.info(f"Dataset {dataset}: {len(dataset_components)} samples loaded")
 
-        # =================== Load Few-Shot Data for 'fewshot-mlp' ===================
         if "real-fewshot" in self.suffix:
-            # Real few-shot: use top 50 TSGym IDs from the current test dataset
             real_fewshot_dataset_name = f"real_fewshot_{test_dataset}"
             logger.info(f"Generating real few-shot data for {test_dataset} from top 50 TSGym IDs...")
             
@@ -619,12 +570,9 @@ class Meta():
                 data = self.dataset_data[test_dataset]
                 names = data['names']
                 
-                # Extract TSGym IDs
                 tsgym_ids = []
                 valid_indices = []
                 for idx, name in enumerate(names):
-                    # name format is usually dataset_TSGym123_...
-                    # we search for TSGym followed by digits
                     match = re.search(r'TSGym(\d+)', name)
                     if match:
                         tsgym_ids.append(int(match.group(1)))
@@ -632,11 +580,9 @@ class Meta():
                 
                 if len(tsgym_ids) > 0:
                     unique_ids = sorted(list(set(tsgym_ids)))
-                    # Take top 50 IDs
                     top_50_ids = set(unique_ids[:500])
                     logger.info(f"Selected {len(top_50_ids)} unique TSGym IDs for few-shot (Range: {min(top_50_ids)} - {max(top_50_ids)})")
                     
-                    # Filter samples
                     fs_indices = [valid_indices[i] for i, tid in enumerate(tsgym_ids) if tid in top_50_ids]
                     
                     if len(fs_indices) > 0:
@@ -645,8 +591,6 @@ class Meta():
                         fs_targets = data['targets'][fs_indices]      # shape (N,)
                         fs_names = [data['names'][i] for i in fs_indices]
                         
-                        # Resample to target size (500 or 250)
-                        # Traffic and ECL use 250, others 500
                         target_size = 250 if test_dataset in ['traffic', 'ECL'] else 500
                         current_len = len(fs_indices)
                         
@@ -844,7 +788,6 @@ class Meta():
             else:
                 logger.warning(f"Few-shot directory not found: {d_path_fewshot}")
 
-        # =================== 处理测试集 ===================
         self.test_script_map = {}
         testset_components, testset_meta_features, testset_targets, testset_targets_mae = [], [], [], []
         self.name_components = []
@@ -905,7 +848,6 @@ class Meta():
             return comps
 
         if self.expand_testset:
-            # 遍历脚本并解析组件
             for sp in script_paths:
                 fn = os.path.basename(sp)
                 suffix = f"_pl{target_pl}.sh"
@@ -930,7 +872,6 @@ class Meta():
                 testset_targets_mae.append(np.nan)
                 self.name_components.append(model_name)
         else:
-            # 从已有结果加载测试集
             for _ in file_dict_test.get(dataset_test, []):
                 if 'Transformer' in _:
                     result_path = result_path_transformer
@@ -952,7 +893,6 @@ class Meta():
                 except FileNotFoundError:
                     continue
                 
-                # 跳过nan值的样本（实验可能失败或未完成）
                 if np.isnan(metric_mse) or np.isnan(metric_mae):
                     continue
                 
@@ -983,7 +923,6 @@ class Meta():
                 testset_targets_mae.append(metric_mae)
                 self.name_components.append(k)
 
-        # 转换为tensor
         self.device = self.utils.get_device()
         
         if len(testset_components) > 0:
@@ -1045,34 +984,28 @@ class Meta():
         
         for dataset, data in self.dataset_data.items():
             if dataset == self.test_dataset:
-                continue  # 跳过测试数据集
+                continue 
             
-            # 对每个数据集内部分别做 rank（归一化到 [1/n, 1]）
             targets = data['targets']
             targets_rank = (np.argsort(np.argsort(targets)).astype(np.float32) + 1) / len(targets)
             
             if dataset == val_dataset:
-                # 作为验证集
                 val_components.append(data['components'])
                 val_meta_features.append(data['meta_features'])
                 val_targets_rank.append(targets_rank)
             else:
-                # 作为训练集
                 train_components.append(data['components'])
                 train_meta_features.append(data['meta_features'])
                 train_targets_rank.append(targets_rank)
         
-        # 合并训练数据（rank 已经在每个数据集内部计算好了）
         train_components = np.concatenate(train_components, axis=0)
         train_meta_features = np.concatenate(train_meta_features, axis=0)
         train_targets_rank = np.concatenate(train_targets_rank, axis=0)
         
-        # 合并验证数据
         val_components = np.concatenate(val_components, axis=0)
         val_meta_features = np.concatenate(val_meta_features, axis=0)
         val_targets_rank = np.concatenate(val_targets_rank, axis=0)
         
-        # 转换为tensor
         train_data = {
             'components': torch.from_numpy(train_components).long().to(self.device),
             'meta_features': torch.from_numpy(train_meta_features).float().to(self.device),
@@ -1186,7 +1119,7 @@ class Meta():
             res_folder = find_result_folder(tsgym_id, dataset_test, target_pl)
             logger.info(f"Result folder for {tsgym_id}, dataset={dataset_test}, pl={target_pl}: {res_folder}")
             result_ready = False
-            true_file_fallback = None  # 用于存储从其他文件夹找到的 true.npy 路径
+            true_file_fallback = None 
             
             if res_folder:
                 pred_file = os.path.join(res_folder, 'pred.npy')
@@ -1194,13 +1127,10 @@ class Meta():
                 if os.path.exists(pred_file) and os.path.exists(true_file):
                     result_ready = True
                 elif os.path.exists(pred_file) and not os.path.exists(true_file):
-                    # pred.npy 存在但 true.npy 缺失
-                    # y_true 只和 dataset 和 pred_len 有关，尝试从其他结果文件夹找 true.npy
                     logger.info(f"pred.npy exists but true.npy missing for {tsgym_id}. Searching for true.npy from other folders...")
                     search_pattern_true = f"{root_path}/resultsGym_*/{dataset_test}/LTF_*_pl{target_pl}_*/true.npy"
                     true_candidates = glob.glob(search_pattern_true)
                     if true_candidates:
-                        # 选择最新的或第一个
                         true_candidates.sort(key=os.path.getmtime, reverse=True)
                         true_file_fallback = true_candidates[0]
                         logger.info(f"Found fallback true.npy: {true_file_fallback}")
@@ -1250,7 +1180,6 @@ class Meta():
                     preds.append(pred)
                     collected_tsgym_ids.append(tsgym_id)  # Record the TSGym ID
                     if trues is None:
-                        # 优先使用原始 true_file，如果不存在则使用 fallback
                         actual_true_file = true_file if os.path.exists(true_file) else true_file_fallback
                         if actual_true_file and os.path.exists(actual_true_file):
                             trues = np.load(actual_true_file)
@@ -1429,118 +1358,22 @@ class Meta():
         return mae, mse, individual_metrics
 
     def meta_init(self):
-        """初始化一个新的meta-learner模型"""
         n_col = [len(_) for _ in self.components.values()]
         
-        if hasattr(self, 'meta_model_type') and 'icl-simple' in self.meta_model_type:
-            # MetaSimpleICL: 无 Q/K/V 投影的简化版 ICL
-            self.model = MetaSimpleICL(
-                n_col=n_col, 
-                d_model=self.d_model,
-                embed_dim_meta_feature=self.meta_feature_dim, 
-                dropout=self.dropout,
-                num_layers=self.n_layers,
-                model_type=self.meta_model_type,
-                k=getattr(self, 'k', 0.0),
-                temporal=getattr(self, 'temporal', 1.0),
-            )
-        elif hasattr(self, 'meta_model_type') and self.meta_model_type == 'icl-frozencomp':
-            # MetaICLFrozenComp: 冻结组件 embedding
-            self.model = MetaICLFrozenComp(
-                n_col=n_col, 
-                d_model=self.d_model,
-                embed_dim_meta_feature=self.meta_feature_dim, 
-                dropout=self.dropout,
-                nhead=self.nhead,
-                num_layers=self.n_layers,
-                model_type=self.meta_model_type,
-                k=getattr(self, 'k', 0.0),
-                temporal=getattr(self, 'temporal', 1.0),
-            )
-        elif hasattr(self, 'meta_model_type') and self.meta_model_type == 'icl-addcomp':
-            # MetaICLAddComp: 组件 embedding 加和而非拼接，维度 256
-            self.model = MetaICLAddComp(
-                n_col=n_col, 
-                d_model=self.d_model,
-                embed_dim_meta_feature=self.meta_feature_dim, 
-                dropout=self.dropout,
-                nhead=self.nhead,
-                num_layers=self.n_layers,
-                model_type=self.meta_model_type,
-                k=getattr(self, 'k', 0.0),
-                temporal=getattr(self, 'temporal', 1.0),
-                add_embed_dim=256,
-            )
-        elif hasattr(self, 'meta_model_type') and self.meta_model_type == 'icl-labelencoder':
-            # MetaICLLabelEncoder: 不使用 nn.Embedding，直接标准化后作为输入
-            self.model = MetaICLLabelEncoder(
-                n_col=n_col, 
-                d_model=self.d_model,
-                embed_dim_meta_feature=self.meta_feature_dim, 
-                dropout=self.dropout,
-                nhead=self.nhead,
-                num_layers=self.n_layers,
-                model_type=self.meta_model_type,
-                k=getattr(self, 'k', 0.0),
-                temporal=getattr(self, 'temporal', 1.0),
-            )
-        elif hasattr(self, 'meta_model_type') and self.meta_model_type == 'icl-nomasktrain-deepinput':
-            # MetaICLDeepInput: 深层输入投影 (Linear->GELU->Linear->LayerNorm)
-            self.model = MetaICLDeepInput(
-                n_col=n_col, 
-                d_model=self.d_model,
-                embed_dim_meta_feature=self.meta_feature_dim, 
-                dropout=self.dropout,
-                nhead=self.nhead,
-                num_layers=self.n_layers,
-                model_type=self.meta_model_type,
-                k=getattr(self, 'k', 0.0),
-                temporal=getattr(self, 'temporal', 1.0),
-            )
-        elif hasattr(self, 'meta_model_type') and self.meta_model_type == 'icl-tabpfn':
-            self.model = MetaICLTabPFN(
-                n_col=n_col,
-                model_path='/data2/coding/tsgym/tabpfn-v2-regressor/tabpfn-v2-regressor-v2_default.ckpt',
-                device='cuda' if torch.cuda.is_available() else 'cpu'
-            )
-        elif hasattr(self, 'meta_model_type') and self.meta_model_type.startswith('icl-'):
-            self.model = MetaICL(
-                n_col=n_col, 
-                d_model=self.d_model,
-                embed_dim_meta_feature=self.meta_feature_dim, 
-                dropout=self.dropout,
-                nhead=self.nhead,
-                num_layers=self.n_layers,
-                model_type=self.meta_model_type,
-                k=getattr(self, 'k', 0.0),
-                temporal=getattr(self, 'temporal', 1.0),
-            )
-        else:
-            self.model = meta_predictor(
-                n_col=n_col, 
-                d_model=self.d_model,
-                embed_dim_meta_feature=self.meta_feature_dim, 
-                dropout=self.dropout,
-                n_layers=self.n_layers
-            )
+        self.model = meta_predictor(
+            n_col=n_col, 
+            d_model=self.d_model,
+            embed_dim_meta_feature=self.meta_feature_dim, 
+            dropout=self.dropout,
+            n_layers=self.n_layers
+        )
         self.model.to(self.device)
         self.optimizer = self.model.configure_optimizers(weight_decay=self.weight_decay, learning_rate=self.lr, device_type='cuda')
         self.criterion = self.loss_pearson
 
     def save_checkpoint(self, model_state, save_path, best_epoch=None, val_loss=None, fold_name=None):
-        """
-        保存meta-learner checkpoint和LabelEncoders。
-        
-        Args:
-            model_state: 模型权重字典
-            save_path: 保存路径（不含扩展名）
-            best_epoch: 最佳epoch
-            val_loss: 验证集loss
-            fold_name: 折名称（可选）
-        """
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         
-        # 保存模型checkpoint
         checkpoint = {
             'model_state_dict': model_state,
             'hyperparams': self.hyperparams,
@@ -1548,7 +1381,7 @@ class Meta():
             'val_loss': val_loss,
             'fold_name': fold_name,
             'meta_model_type': self.meta_model_type,
-            'components_mapping': self.components,  # 组件编码映射
+            'components_mapping': self.components,  
             'n_col': [len(_) for _ in self.components.values()],
             'd_model': self.d_model,
             'meta_feature_dim': self.meta_feature_dim,
@@ -1560,12 +1393,10 @@ class Meta():
             'pred_len_2': self.pred_len_2,
         }
         
-        # 保存模型checkpoint (PyTorch格式)
         model_path = f"{save_path}_model.pt"
         torch.save(checkpoint, model_path)
         logger.info(f"Model checkpoint saved to: {model_path}")
         
-        # 保存LabelEncoders (使用joblib)
         if hasattr(self, 'label_encoders'):
             encoders_path = f"{save_path}_label_encoders.pkl"
             joblib.dump(self.label_encoders, encoders_path)
@@ -1575,29 +1406,13 @@ class Meta():
 
     @classmethod
     def load_checkpoint(cls, checkpoint_path, label_encoders_path=None, device='cuda'):
-        """
-        加载meta-learner checkpoint和LabelEncoders进行推理。
-        
-        Args:
-            checkpoint_path: 模型checkpoint路径 (.pt文件)
-            label_encoders_path: LabelEncoders路径 (.pkl文件)，如果为None则尝试自动推断
-            device: 设备
-        
-        Returns:
-            model: 加载好的模型
-            label_encoders: LabelEncoders字典
-            checkpoint: checkpoint字典（包含超参数等信息）
-        """
-        # 加载checkpoint
+
         checkpoint = torch.load(checkpoint_path, map_location=device)
         
-        # 推断label_encoders路径
         if label_encoders_path is None:
-            # 尝试从checkpoint路径推断
             base_path = checkpoint_path.replace('_model.pt', '')
             label_encoders_path = f"{base_path}_label_encoders.pkl"
         
-        # 加载LabelEncoders
         label_encoders = None
         if os.path.exists(label_encoders_path):
             label_encoders = joblib.load(label_encoders_path)
@@ -1605,7 +1420,6 @@ class Meta():
         else:
             logging.warning(f"LabelEncoders not found at: {label_encoders_path}")
         
-        # 重建模型
         meta_model_type = checkpoint.get('meta_model_type', 'mlp')
         n_col = checkpoint['n_col']
         d_model = checkpoint['d_model']
@@ -1614,77 +1428,14 @@ class Meta():
         nhead = checkpoint.get('nhead', 4)
         n_layers = checkpoint.get('n_layers', 2)
         
-        if 'icl-simple' in meta_model_type:
-            # MetaSimpleICL: 无 Q/K/V 投影
-            model = MetaSimpleICL(
-                n_col=n_col,
-                d_model=d_model,
-                embed_dim_meta_feature=meta_feature_dim,
-                dropout=dropout,
-                num_layers=n_layers,
-                model_type=meta_model_type
-            )
-        elif meta_model_type == 'icl-frozencomp':
-            model = MetaICLFrozenComp(
-                n_col=n_col,
-                d_model=d_model,
-                embed_dim_meta_feature=meta_feature_dim,
-                dropout=dropout,
-                nhead=nhead,
-                num_layers=n_layers,
-                model_type=meta_model_type
-            )
-        elif meta_model_type == 'icl-addcomp':
-            model = MetaICLAddComp(
-                n_col=n_col,
-                d_model=d_model,
-                embed_dim_meta_feature=meta_feature_dim,
-                dropout=dropout,
-                nhead=nhead,
-                num_layers=n_layers,
-                model_type=meta_model_type,
-                add_embed_dim=256
-            )
-        elif meta_model_type == 'icl-labelencoder':
-            model = MetaICLLabelEncoder(
-                n_col=n_col,
-                d_model=d_model,
-                embed_dim_meta_feature=meta_feature_dim,
-                dropout=dropout,
-                nhead=nhead,
-                num_layers=n_layers,
-                model_type=meta_model_type
-            )
-        elif meta_model_type == 'icl-nomasktrain-deepinput':
-            model = MetaICLDeepInput(
-                n_col=n_col,
-                d_model=d_model,
-                embed_dim_meta_feature=meta_feature_dim,
-                dropout=dropout,
-                nhead=nhead,
-                num_layers=n_layers,
-                model_type=meta_model_type
-            )
-        elif meta_model_type.startswith('icl-'):
-            model = MetaICL(
-                n_col=n_col,
-                d_model=d_model,
-                embed_dim_meta_feature=meta_feature_dim,
-                dropout=dropout,
-                nhead=nhead,
-                num_layers=n_layers,
-                model_type=meta_model_type
-            )
-        else:
-            model = meta_predictor(
-                n_col=n_col,
-                d_model=d_model,
-                embed_dim_meta_feature=meta_feature_dim,
-                dropout=dropout,
-                n_layers=n_layers
-            )
+        model = meta_predictor(
+            n_col=n_col,
+            d_model=d_model,
+            embed_dim_meta_feature=meta_feature_dim,
+            dropout=dropout,
+            n_layers=n_layers
+        )
         
-        # 加载模型权重
         model.load_state_dict(checkpoint['model_state_dict'])
         model.to(device)
         model.eval()
@@ -1697,31 +1448,18 @@ class Meta():
         return model, label_encoders, checkpoint
 
     def meta_fit_single_fold(self, train_data, val_data, fold_name):
-        """
-        训练单个折的meta-learner。
-        
-        Args:
-            train_data: 训练数据字典
-            val_data: 验证数据字典
-            fold_name: 折名称（验证数据集名称）
-        
-        Returns:
-            fold_results: 该折的训练结果
-        """
         best_metric = 999
         best_epoch = 0
         es_count = 0
         es_stopped = False
         best_model_wts = copy.deepcopy(self.model.state_dict())
 
-        # 创建DataLoader
         trainset = TensorDataset(train_data['components'], train_data['meta_features'], train_data['targets'])
         valset = TensorDataset(val_data['components'], val_data['meta_features'], val_data['targets'])
         
         trainloader = DataLoader(trainset, batch_size=self.batch_size, shuffle=True, drop_last=True)
         valloader = DataLoader(valset, batch_size=self.batch_size, shuffle=False, drop_last=False)
         
-        # 记录每个epoch的结果
         epoch_results = {
             'train_loss': [],
             'val_loss': [],
@@ -1784,7 +1522,6 @@ class Meta():
                         self.optimizer.step()
                     epoch_results['train_loss'].append(np.mean(loss_batch))
             
-            # 验证
             self.model.eval()
             with torch.no_grad():
                 if hasattr(self, 'meta_model_type') and 'icl' in self.meta_model_type:
@@ -1804,7 +1541,6 @@ class Meta():
             
             epoch_results['val_loss'].append(val_loss)
             
-            # 早停
             if not es_stopped:
                 if val_loss < best_metric:
                     best_metric = val_loss
@@ -1817,7 +1553,6 @@ class Meta():
                         logger.info(f'Fold {fold_name}: Early stopping at epoch {epoch}')
                         es_stopped = True
         
-        # 恢复最佳模型
         self.model.load_state_dict(best_model_wts)
         
         return {
@@ -1829,26 +1564,7 @@ class Meta():
 
     @torch.no_grad()
     def meta_predict_with_model(self, model_state, train_data, return_attention=False):
-        """
-        使用指定的模型状态进行预测。
-        
-        Args:
-            model_state: 模型权重
-            train_data: 训练数据字典
-            return_attention: 是否返回 attention scores（仅对 ICL 模型有效）
-        
-        Returns:
-            y_preds: 预测值
-            attention_info: attention 信息字典（仅当 return_attention=True 且为 ICL 模型时）
-                - 'attention_scores': list of (1, L, L) Softmax Attention Scores from each layer
-                - 'N_train': 训练样本数
-                - 'N_test': 测试样本数
-                - 四个子矩阵（按 attention 方向命名：source_to_target）：
-                  - 'train_to_train': (num_layers, N_train, N_train) - TL block
-                  - 'train_to_test': (num_layers, N_train, N_test) - TR block (通常被 mask)
-                  - 'test_to_train': (num_layers, N_test, N_train) - BL block
-                  - 'test_to_test': (num_layers, N_test, N_test) - BR block
-        """
+
         if self.meta_model_type != 'icl-tabpfn':
             self.model.load_state_dict(model_state)
         self.model.eval()
@@ -1864,16 +1580,13 @@ class Meta():
             if self.meta_model_type == 'icl-tabpfn':
                 kwargs['train_targets'] = train_targets
 
-            # 对于ICL，需要构建完整的训练集作为support
             if return_attention:
-                # 调用带 attention 返回的 forward
                 _, y_pred, attention_info = self.model(
                     (train_components, train_meta), 
                     test_data=(self.testset_components, self.testset_meta_features),
                     return_attention=True,
                     **kwargs
                 )
-                # 将 attention tensors 转移到 CPU 并转为 numpy
                 if attention_info is not None:
                     for key in ['train_to_train', 'train_to_test', 'test_to_train', 'test_to_test']:
                         if key in attention_info and attention_info[key] is not None:
@@ -1903,41 +1616,24 @@ class Meta():
         return y_preds
 
     def baseline_nn_predict(self, train_data, val_dataset):
-        """
-        Baseline: Nearest Neighbor 方法
-        找到与测试集最近的训练数据集，使用该数据集的 performance 作为预测。
-        
-        Args:
-            train_data: 训练数据字典 (包含多个数据集的合并数据)
-            val_dataset: 验证数据集名称 (用于 logging)
-        
-        Returns:
-            y_preds: 对测试集的预测值
-            min_dist: 最近距离
-        """
-        # 获取测试集的 Meta Feature（假设所有测试样本属于同一个数据集，meta feature 相同）
+
         test_feat = self.testset_meta_features[0].cpu().numpy()  # Shape: (D_meta,)
         
-        # 获取训练数据中所有样本的 Meta Features
         train_feats = train_data['meta_features'].cpu().numpy()  # Shape: (N_train, D_meta)
         train_comps = train_data['components'].cpu().numpy()  # Shape: (N_train, n_col)
         train_targets = train_data['targets'].cpu().numpy()  # Shape: (N_train,)
         
-        # 计算测试集与训练集所有样本的距离 (Euclidean)
         dists = np.linalg.norm(train_feats - test_feat, axis=1)  # Shape: (N_train,)
         
-        # 找到最近的样本
         min_dist = np.min(dists)
         nearest_idx = np.argmin(dists)
         nearest_feat = train_feats[nearest_idx]
         
-        # 找到属于最近数据集的所有样本 (Meta Feature 相同)
         dists_to_nearest = np.linalg.norm(train_feats - nearest_feat, axis=1)
         nearest_dataset_indices = np.where(dists_to_nearest < 1e-6)[0]
         
         logger.info(f"Baseline-NN: Nearest distance={min_dist:.6f}, found {len(nearest_dataset_indices)} samples in nearest dataset.")
         
-        # 构建映射: Component -> Performance (from Nearest Dataset)
         nearest_comps = train_comps[nearest_dataset_indices]
         nearest_targets = train_targets[nearest_dataset_indices]
         
@@ -1946,7 +1642,6 @@ class Meta():
             comp_key = tuple(comp.tolist())
             comp_perf_map[comp_key] = nearest_targets[idx]
         
-        # 预测测试集的 Performance
         testset_comps = self.testset_components.cpu().numpy()
         y_preds = []
         for comp in testset_comps:
@@ -1954,71 +1649,53 @@ class Meta():
             if comp_key in comp_perf_map:
                 y_preds.append(comp_perf_map[comp_key])
             else:
-                # Fallback: 使用最近数据集的平均性能
                 y_preds.append(9999)
         
         return np.array(y_preds), min_dist
 
     def meta_fit_baseline_nn(self):
-        """
-        Baseline: Nearest Neighbor 方法（不需要训练）
-        
-        找到与 test dataset 最近的训练数据集，直接使用该数据集的 top1 组合作为预测结果。
-        
-        Returns:
-            dict: 包含 top1 性能和名称的结果字典
-        """
+
         logger.info(f"\n{'='*60}")
         logger.info(f"Baseline: Nearest Neighbor")
         logger.info(f"Test dataset: {self.test_dataset}")
         logger.info(f"{'='*60}\n")
         
-        # 获取测试集的 Meta Feature（假设同一数据集的所有样本 meta feature 相同）
         test_feat = self.testset_meta_features[0].cpu().numpy()  # Shape: (D_meta,)
         
-        # 获取所有训练数据集的信息
         train_datasets = [d for d in self.datasets_train if d in self.dataset_data]
         
         logger.info(f"Training datasets: {train_datasets}")
         
-        # 计算测试集与每个训练数据集的距离
         dataset_distances = {}
         for dataset in train_datasets:
             data = self.dataset_data[dataset]
-            # 每个数据集的 meta feature 应该是相同的，取第一个
             dataset_feat = data['meta_features'][0]
             dist = np.linalg.norm(dataset_feat - test_feat)
             dataset_distances[dataset] = dist
             logger.info(f"  Distance to {dataset}: {dist:.6f}")
         
-        # 找到最近的数据集
         nearest_dataset = min(dataset_distances, key=dataset_distances.get)
         min_dist = dataset_distances[nearest_dataset]
         
         logger.info(f"\nNearest dataset: {nearest_dataset} (distance={min_dist:.6f})")
         
-        # 获取最近数据集的数据
         nearest_data = self.dataset_data[nearest_dataset]
-        nearest_targets = nearest_data['targets']  # 原始 performance (MSE)
+        nearest_targets = nearest_data['targets']  
         nearest_comps = nearest_data['components']
         
-        # 获取最近数据集中的所有组合，按 performance 排序（targets 越小越好）
-        nearest_indices_sorted = np.argsort(nearest_targets)  # 按 performance 从小到大排序
+        nearest_indices_sorted = np.argsort(nearest_targets)  
         
-        # 在测试集中查找对应的组合
         testset_comps = self.testset_components.cpu().numpy()
         y_trues = self.testset_targets.cpu().numpy()
         y_trues_mae = self.testset_targets_mae.cpu().numpy()
         
-        # 构建测试集的 component -> index 映射（用于快速查找）
         testset_comp_to_idx = {}
         for idx, comp in enumerate(testset_comps):
             comp_key = tuple(comp.tolist())
             testset_comp_to_idx[comp_key] = idx
         
-        # 从最近数据集的 top1 开始，顺延查找在测试集中存在的组合
         pred_top1_idx = None
-        fallback_rank = 1  # 记录使用了第几优的组合
+        fallback_rank = 1 
         
         for rank_idx, nearest_comp_idx in enumerate(nearest_indices_sorted):
             nearest_comp = nearest_comps[nearest_comp_idx]
@@ -2026,7 +1703,6 @@ class Meta():
             nearest_perf = nearest_targets[nearest_comp_idx]
             
             if nearest_comp_key in testset_comp_to_idx:
-                # 找到了在测试集中存在的组合
                 pred_top1_idx = testset_comp_to_idx[nearest_comp_key]
                 fallback_rank = rank_idx + 1
                 
@@ -2048,15 +1724,13 @@ class Meta():
             top1_name = self.name_components[pred_top1_idx]
             logger.info(f"Selected combination: {top1_name} (rank={fallback_rank} in nearest dataset)")
         else:
-            # 如果最近数据集的所有组合都不在测试集中（这种情况应该很少见）
             logger.error(f"None of the combinations from nearest dataset found in testset!")
             logger.error(f"Nearest dataset has {len(nearest_comps)} combinations, testset has {len(testset_comps)} combinations")
-            # 使用测试集中 performance 最好的组合作为 fallback
             testset_top1_idx = np.argmin(y_trues)
             top1_perf = y_trues[testset_top1_idx]
             top1_perf_mae = y_trues_mae[testset_top1_idx]
             top1_name = self.name_components[testset_top1_idx]
-            fallback_rank = -1  # 表示使用了测试集的 top1 作为 fallback
+            fallback_rank = -1
             logger.warning(f"Using testset's top1 combination as fallback: {top1_name}")
         
         logger.info(f"\n{'='*60}")
@@ -2068,7 +1742,6 @@ class Meta():
         logger.info(f"Top 1 Performance (MAE): {top1_perf_mae:.6f}")
         logger.info(f"{'='*60}\n")
         
-        # 保存结果
         max_size_suffix = f'-maxsize_{self.max_size}' if self.max_size else ''
         expand_suffix = f'-expand_{self.expand_testset}' if hasattr(self, 'expand_testset') else ''
         clip_suffix = f'-clip_{self.clip_timestamps}' if hasattr(self, 'clip_timestamps') else ''
@@ -2092,24 +1765,20 @@ class Meta():
         
         np.savez(
             result_path,
-            # 基本信息
             test_dataset=self.test_dataset,
             pred_len_1=self.pred_len_1,
             pred_len_2=self.pred_len_2,
             meta_model_type=self.meta_model_type,
             
-            # Baseline-NN 结果
             nearest_dataset=nearest_dataset,
             nearest_distance=min_dist,
             dataset_distances=dataset_distances,
             used_rank_in_nearest_dataset=fallback_rank,
             
-            # Top1 结果
             top1_name=top1_name,
             top1_perf_mse=top1_perf,
             top1_perf_mae=top1_perf_mae,
             
-            # 所有测试集真实值（用于后续分析）
             y_trues=y_trues,
             y_trues_mae=y_trues_mae,
             name_components=self.name_components,
@@ -2127,28 +1796,16 @@ class Meta():
         }
 
     def meta_fit_baseline_nn_dataset_ensemble(self, topk_datasets=3):
-        """
-        Baseline: Dataset Ensemble - 找到 top-k 最相似的数据集，使用每个数据集的 top1 组合进行 ensemble。
-        
-        Args:
-            topk_datasets: 要查找的最相似数据集数量（默认 3）
-        
-        Returns:
-            dict: 包含 ensemble 结果的字典
-        """
         logger.info(f"\n{'='*60}")
         logger.info(f"Baseline: Nearest Neighbor Dataset Ensemble (top-{topk_datasets})")
         logger.info(f"Test dataset: {self.test_dataset}")
         logger.info(f"{'='*60}\n")
         
-        # 获取测试集的 Meta Feature
         test_feat = self.testset_meta_features[0].cpu().numpy()
         
-        # 获取所有训练数据集的信息
         train_datasets = [d for d in self.datasets_train if d in self.dataset_data]
         logger.info(f"Training datasets: {train_datasets}")
         
-        # 计算测试集与每个训练数据集的距离
         dataset_distances = {}
         for dataset in train_datasets:
             data = self.dataset_data[dataset]
@@ -2157,7 +1814,6 @@ class Meta():
             dataset_distances[dataset] = dist
             logger.info(f"  Distance to {dataset}: {dist:.6f}")
         
-        # 找到 top-k 最近的数据集
         sorted_datasets = sorted(dataset_distances.items(), key=lambda x: x[1])
         topk_nearest = sorted_datasets[:topk_datasets]
         
@@ -2165,13 +1821,11 @@ class Meta():
         for i, (ds, dist) in enumerate(topk_nearest):
             logger.info(f"  {i+1}. {ds} (distance={dist:.6f})")
         
-        # 收集每个最近数据集的 top1 组合名称
         topk_names = []
         testset_comps = self.testset_components.cpu().numpy()
         y_trues = self.testset_targets.cpu().numpy()
         y_trues_mae = self.testset_targets_mae.cpu().numpy()
         
-        # 构建测试集的 component -> index 映射
         testset_comp_to_idx = {}
         for idx, comp in enumerate(testset_comps):
             comp_key = tuple(comp.tolist())
@@ -2183,7 +1837,6 @@ class Meta():
             nearest_comps = nearest_data['components']
             nearest_indices_sorted = np.argsort(nearest_targets)
             
-            # 找到在测试集中存在的最佳组合
             found = False
             for rank_idx, nearest_comp_idx in enumerate(nearest_indices_sorted):
                 nearest_comp = nearest_comps[nearest_comp_idx]
@@ -2206,7 +1859,6 @@ class Meta():
         
         logger.info(f"\nSelected combinations for ensemble: {topk_names}")
         
-        # 使用现有的 ensemble_predictions 方法进行集成
         ens_mae, ens_mse, individual_metrics = self.ensemble_predictions(
             topk_names, self.test_dataset, root_path=self.write_results_root
         )
@@ -2217,7 +1869,6 @@ class Meta():
         logger.info(f"Ensemble MSE: {ens_mse:.6f}" if not np.isnan(ens_mse) else "Ensemble MSE: N/A")
         logger.info(f"{'='*60}\n")
         
-        # 保存结果
         max_size_suffix = f'-maxsize_{self.max_size}' if self.max_size else ''
         expand_suffix = f'-expand_{self.expand_testset}' if hasattr(self, 'expand_testset') else ''
         clip_suffix = f'-clip_{self.clip_timestamps}' if hasattr(self, 'clip_timestamps') else ''
@@ -2266,28 +1917,17 @@ class Meta():
         }
 
     def meta_fit_baseline_nn_components_ensemble(self, topk_components=5):
-        """
-        Baseline: Components Ensemble - 找到 top-1 最相似的数据集，使用该数据集的 top-k 组合进行 ensemble。
-        
-        Args:
-            topk_components: 要使用的组合数量（默认 5）
-        
-        Returns:
-            dict: 包含 ensemble 结果的字典
-        """
+
         logger.info(f"\n{'='*60}")
         logger.info(f"Baseline: Nearest Neighbor Components Ensemble (top-{topk_components} from nearest)")
         logger.info(f"Test dataset: {self.test_dataset}")
         logger.info(f"{'='*60}\n")
         
-        # 获取测试集的 Meta Feature
         test_feat = self.testset_meta_features[0].cpu().numpy()
         
-        # 获取所有训练数据集的信息
         train_datasets = [d for d in self.datasets_train if d in self.dataset_data]
         logger.info(f"Training datasets: {train_datasets}")
         
-        # 计算测试集与每个训练数据集的距离
         dataset_distances = {}
         for dataset in train_datasets:
             data = self.dataset_data[dataset]
@@ -2296,12 +1936,10 @@ class Meta():
             dataset_distances[dataset] = dist
             logger.info(f"  Distance to {dataset}: {dist:.6f}")
         
-        # 找到最近的数据集
         nearest_dataset = min(dataset_distances, key=dataset_distances.get)
         min_dist = dataset_distances[nearest_dataset]
         logger.info(f"\nNearest dataset: {nearest_dataset} (distance={min_dist:.6f})")
         
-        # 获取最近数据集的数据
         nearest_data = self.dataset_data[nearest_dataset]
         nearest_targets = nearest_data['targets']
         nearest_comps = nearest_data['components']
@@ -2311,13 +1949,11 @@ class Meta():
         y_trues = self.testset_targets.cpu().numpy()
         y_trues_mae = self.testset_targets_mae.cpu().numpy()
         
-        # 构建测试集的 component -> index 映射
         testset_comp_to_idx = {}
         for idx, comp in enumerate(testset_comps):
             comp_key = tuple(comp.tolist())
             testset_comp_to_idx[comp_key] = idx
         
-        # 收集 top-k 组合名称
         topk_names = []
         for rank_idx, nearest_comp_idx in enumerate(nearest_indices_sorted):
             if len(topk_names) >= topk_components:
@@ -2341,7 +1977,6 @@ class Meta():
         
         logger.info(f"\nSelected top-{len(topk_names)} combinations from {nearest_dataset}: {topk_names}")
         
-        # 使用现有的 ensemble_predictions 方法进行集成
         ens_mae, ens_mse, individual_metrics = self.ensemble_predictions(
             topk_names, self.test_dataset, root_path=self.write_results_root
         )
@@ -2354,7 +1989,6 @@ class Meta():
         logger.info(f"Ensemble MSE: {ens_mse:.6f}" if not np.isnan(ens_mse) else "Ensemble MSE: N/A")
         logger.info(f"{'='*60}\n")
         
-        # 保存结果
         max_size_suffix = f'-maxsize_{self.max_size}' if self.max_size else ''
         expand_suffix = f'-expand_{self.expand_testset}' if hasattr(self, 'expand_testset') else ''
         clip_suffix = f'-clip_{self.clip_timestamps}' if hasattr(self, 'clip_timestamps') else ''
@@ -2541,27 +2175,13 @@ class Meta():
             'fewshot_mae': best_mae
         }
 
-    # =================== Legacy模式评估方法（用于arg_all_periods模式） ===================
     def _evaluate_legacy_with_trained_model(self, model_state, train_history=None):
-        """
-        使用已训练的模型在当前测试集上进行评估。
-        用于 arg_all_periods=True 且 use_kfold=False (legacy模式) 时，
-        训练一次后对不同 pred_len 的测试集分别评估。
-        
-        Args:
-            model_state: 已训练模型的 state_dict
-            train_history: Optional training history to save with results
-        
-        Returns:
-            dict: 评估结果
-        """
+
         self.model.load_state_dict(model_state)
         logger.info(f"[Legacy] Evaluating with trained model on test set (pred_len={self.pred_len_1}/{self.pred_len_2})")
         
-        # 加载模型权重
         self.model.eval()
         
-        # 获取测试集真实值
         y_trues = self.testset_targets.cpu().numpy()
         y_trues_mae = self.testset_targets_mae.cpu().numpy()
         has_valid_targets = not np.isnan(y_trues).all()
@@ -2570,7 +2190,6 @@ class Meta():
         
         with torch.no_grad():
             if is_icl_model:
-                # ICL模型：使用训练数据作为context
                 all_train_components = []
                 all_train_meta = []
                 for dataset, data in self.dataset_data.items():
@@ -2587,7 +2206,6 @@ class Meta():
                 )
                 y_preds = y_pred.squeeze().cpu().numpy()
             else:
-                # MLP模型：直接在测试集上预测
                 testloader = DataLoader(
                     TensorDataset(self.testset_components, self.testset_meta_features, self.testset_targets, self.testset_targets_mae),
                     batch_size=self.batch_size, shuffle=False, drop_last=False
@@ -2599,7 +2217,6 @@ class Meta():
                     y_preds_list.append(y_pred.squeeze())
                 y_preds = torch.cat(y_preds_list).cpu().numpy()
         
-        # 计算评估指标
         if not has_valid_targets:
             top1_perf = np.nan
             top1_perf_mae = np.nan
@@ -2619,7 +2236,6 @@ class Meta():
             pred_ranks_for_true_topk = np.mean(pred_ranks[true_topk_indices])
             true_ranks_for_pred_topk = np.mean(true_ranks[pred_topk_indices])
         
-        # 获取top名称
         top_name = self.name_components[np.argmin(y_preds)]
         topk_names = [self.name_components[i] for i in np.argsort(y_preds)[:5]]
         
@@ -2633,7 +2249,6 @@ class Meta():
             logger.info(f"True ranks for pred top5: {true_ranks_for_pred_topk:.2f}")
         logger.info(f"{'='*60}\n")
         
-        # 保存结果（简化版，不运行 ensemble）
         max_size_suffix = f'-max_size_{self.max_size}' if self.max_size is not None else ''
         expand_suffix = f'-expand_testset' if self.expand_testset else ''
         clip_suffix = f'-clip_{self.clip_timestamps}{int(self.cutoff_time)}' if self.clip_timestamps else ''
@@ -2665,14 +2280,11 @@ class Meta():
         
         np.savez_compressed(
             save_path,
-            # 超参数
             hyperparams=self.hyperparams,
             
-            # 评估模式标识
             k_folds=1,
             training_mode='legacy_all_periods_eval',
             
-            # 预测结果
             predictions=y_preds,
             pred_ranks_for_true_topk=pred_ranks_for_true_topk,
             true_ranks_for_pred_topk=true_ranks_for_pred_topk,
@@ -2682,7 +2294,6 @@ class Meta():
             top_name=top_name,
             topk_names=topk_names,
             
-            # 其他
             test_dataset=self.test_dataset,
             pred_len_1=self.pred_len_1,
             pred_len_2=self.pred_len_2,
@@ -2699,12 +2310,9 @@ class Meta():
             'top1_perf_mae': top1_perf_mae,
         }
 
-    # =================== 保留原有的单模型训练方法（向后兼容） ===================
     def meta_fit(self, best_metric=999, best_epoch=0, es_count=0, es_tol=5, es_stopped=False):
-        """原有的单模型训练方法，保留用于向后兼容"""
         logger.info("Warning: Using legacy single-model training.")
         
-        # 构建完整训练集（对每个数据集内部分别做 rank）
         all_train_components = []
         all_train_meta = []
         all_train_targets_rank = []
@@ -2714,7 +2322,6 @@ class Meta():
             if dataset != self.test_dataset:
                 all_train_components.append(data['components'])
                 all_train_meta.append(data['meta_features'])
-                # 对每个数据集内部分别做 rank（归一化到 [1/n, 1]）
                 targets = data['targets']
                 targets_rank = (np.argsort(np.argsort(targets)).astype(np.float32) + 1) / len(targets)
                 lower, upper = np.percentile(targets, [0.1, 99.9])
@@ -2735,7 +2342,6 @@ class Meta():
         if self.suffix == 'rawlabel':
             train_targets = torch.from_numpy(train_targets_metrics).float().to(self.device)
         
-        # 70/30分割
         train_size = int(0.7 * len(train_targets))
         indices = torch.randperm(len(train_targets))
         train_indices = indices[:train_size]
@@ -2809,7 +2415,6 @@ class Meta():
                         loss_batch.append(loss.item())
                         self.optimizer.step()
 
-                # 验证
                 self.model.eval()
                 with torch.no_grad():
                     val_preds, val_trues = [], []
@@ -2821,9 +2426,6 @@ class Meta():
                             _, y_pred = self.model(component, meta_feature)
                             val_preds.append(y_pred.view(-1))
                             val_trues.append(y_true.view(-1))
-                        # print(val_preds)
-                        # print(torch.cat(val_preds).flatten())
-                        # print(torch.cat(val_trues).flatten())
                         val_loss = self.criterion(torch.cat(val_preds).flatten(), torch.cat(val_trues).flatten()).item()
                     else:
                         if hasattr(self, 'meta_model_type') and self.meta_model_type == 'icl-tabpfn':
@@ -2962,79 +2564,26 @@ class Meta():
             logger.info(f"{em['epoch']:<6} | {t_rank:<10} | {t_mse:<10} | {t_mae:<10} | {v_loss:<10}")
         logger.info(f"{'='*60}\n")
         
-        # =================== 在测试集上预测 ===================
         self.model.eval()
         y_trues = self.testset_targets.cpu().numpy()
         y_trues_mae = self.testset_targets_mae.cpu().numpy()
         has_valid_targets = not np.isnan(y_trues).all()
         
-        # 检查是否需要保存 attention
         should_save_attention = self.save_attention and is_icl_model
         attention_info = None
         
         with torch.no_grad():
-            if is_icl_model:
-                # ICL模型：使用训练数据作为context
-                all_train_components = []
-                all_train_meta = []
-                for dataset, data in self.dataset_data.items():
-                    if dataset != self.test_dataset:
-                        all_train_components.append(data['components'])
-                        all_train_meta.append(data['meta_features'])
-                
-                train_comp = torch.from_numpy(np.concatenate(all_train_components, axis=0)).long().to(self.device)
-                train_meta_tensor = torch.from_numpy(np.concatenate(all_train_meta, axis=0)).float().to(self.device)
-                
-                if should_save_attention:
-                    # 获取 attention scores
-                    _, y_pred, attention_info = self.model(
-                        (train_comp, train_meta_tensor), 
-                        test_data=(self.testset_components, self.testset_meta_features),
-                        return_attention=True
-                    )
-                    # 将 attention tensors 转移到 CPU 并转为 numpy
-                    if attention_info is not None:
-                        for key in ['train_to_train', 'train_to_test', 'test_to_train', 'test_to_test']:
-                            if key in attention_info and attention_info[key] is not None:
-                                attention_info[key] = attention_info[key].cpu().numpy()
-                else:
-                    kwargs = {}
-                    if hasattr(self, 'meta_model_type') and self.meta_model_type == 'icl-tabpfn':
-                        # For TabPFN, we need the targets corresponding to the Full context (all_train_components).
-                        # The variable 'train_targets' in this scope is the 70% training subset (from line 3916),
-                        # which does NOT match 'train_comp' (full set) constructed here.
-                        # We must reconstruct the full targets consistent with all_train_actions.
-                        
-                        if self.suffix == 'rawlabel':
-                             # Use the raw/metric targets if rawlabel is specified
-                             full_targets_np = train_targets_metrics
-                        else:
-                             # Use the ranked targets
-                             full_targets_np = train_targets_rank
-                        
-                        # Ensure it is on the correct device
-                        kwargs['train_targets'] = torch.from_numpy(full_targets_np).float().to(self.device)
-                    
-                    _, y_pred = self.model(
-                        (train_comp, train_meta_tensor), 
-                        test_data=(self.testset_components, self.testset_meta_features),
-                        **kwargs
-                    )
-                y_preds = y_pred.squeeze().cpu().numpy()
-            else:
-                # MLP模型：直接在测试集上预测
-                testloader = DataLoader(
-                    TensorDataset(self.testset_components, self.testset_meta_features, self.testset_targets, self.testset_targets_mae),
-                    batch_size=self.batch_size, shuffle=False, drop_last=False
-                )
-                y_preds_list = []
-                for batch in testloader:
-                    component, meta_feature, _, _ = batch
-                    _, y_pred = self.model(component, meta_feature)
-                    y_preds_list.append(y_pred.view(-1))
-                y_preds = torch.cat(y_preds_list).cpu().numpy()
+            testloader = DataLoader(
+                TensorDataset(self.testset_components, self.testset_meta_features, self.testset_targets, self.testset_targets_mae),
+                batch_size=self.batch_size, shuffle=False, drop_last=False
+            )
+            y_preds_list = []
+            for batch in testloader:
+                component, meta_feature, _, _ = batch
+                _, y_pred = self.model(component, meta_feature)
+                y_preds_list.append(y_pred.view(-1))
+            y_preds = torch.cat(y_preds_list).cpu().numpy()
         
-        # =================== 计算评估指标 ===================
         if not has_valid_targets:
             top1_perf = np.nan
             top1_perf_mae = np.nan
@@ -3054,7 +2603,6 @@ class Meta():
             pred_ranks_for_true_topk = np.mean(pred_ranks[true_topk_indices])
             true_ranks_for_pred_topk = np.mean(true_ranks[pred_topk_indices])
         
-        # 获取top名称
         top_name = self.name_components[np.argmin(y_preds)]
         topk_names = [self.name_components[i] for i in np.argsort(y_preds)[:5]]
         
@@ -3069,12 +2617,10 @@ class Meta():
         logger.info(f"Best training epoch: {best_epoch}")
         logger.info(f"{'='*60}\n")
         
-        # =================== 集成top5组合或expand testset ===================
         ens_mae, ens_mse, individual_metrics = np.nan, np.nan, []
         selected_script_metrics = {'mae': np.nan, 'mse': np.nan, 'script': None, 'result_folder': None}
         
         if self.expand_testset:
-            # expand模式：选择预测的top1，运行实验
             best_name = topk_names[0] if len(topk_names) > 0 else None
             if best_name and hasattr(self, 'test_script_map') and best_name in self.test_script_map:
                 script_path = self.test_script_map[best_name]
@@ -3144,22 +2690,18 @@ class Meta():
                         logger.error(f"[expand_testset] failed to run best script: {e}")
         else:
             if self.ensemble_enabled:
-                # 非expand模式：集成预测的top5
                 ens_mae, ens_mse, individual_metrics = self.ensemble_predictions(
                     topk_names, self.test_dataset, root_path=self.write_results_root
                 )
             else:
                 logger.info('Ensemble disabled; skipping ensemble_predictions.')
         
-        # =================== 保存结果 ===================
         cross_dataset_perf = self.get_cross_dataset_performance(topk_names[0]) if not self.expand_testset else {}
         
-        # 构建文件名
         max_size_suffix = f'-max_size_{self.max_size}' if self.max_size is not None else ''
         expand_suffix = f'-expand_testset' if self.expand_testset else ''
         clip_suffix = f'-clip_{self.clip_timestamps}{int(self.cutoff_time)}' if self.clip_timestamps else ''
         
-        # 添加超参数到文件名
         k_val = getattr(self, "k", 0.0)
         temp_val = getattr(self, "temporal", 1.0)
         if "icl" in getattr(self, "meta_model_type", ""):
@@ -3170,7 +2712,6 @@ class Meta():
             ktemp_suffix = ""
         hp_suffix = f'-lr_{self.lr}-dm_{self.d_model}-nl_{self.n_layers}-wd_{self.weight_decay}{icl_suffix}{ktemp_suffix}'
         
-        # =================== 保存最佳checkpoint ===================
         checkpoint_base_path = (
             f'./meta/checkpoints/checkpoints_{self.meta_feature_type}/'
             f'{self.test_dataset}-model_{self.meta_model_type}'
@@ -3184,7 +2725,6 @@ class Meta():
             f'_{self.pred_len_1}_{self.pred_len_2}_legacy'
         )
         
-        # 保存最佳模型checkpoint
         self.save_checkpoint(
             model_state=best_model_wts,
             save_path=f"{checkpoint_base_path}_best",
@@ -3208,21 +2748,17 @@ class Meta():
             f'_{self.pred_len_1}_{self.pred_len_2}_legacy.npz'
         )
         
-        # 确保目录存在
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         
         np.savez_compressed(
             save_path,
-            # 超参数
             hyperparams=self.hyperparams,
             
-            # 单模型结果（无K折）
             k_folds=1,
             training_mode='legacy_70_30_split',
             best_epoch=best_epoch,
             best_val_loss=best_metric,
             
-            # 预测结果
             predictions=y_preds,
             pred_ranks_for_true_topk=pred_ranks_for_true_topk,
             true_ranks_for_pred_topk=true_ranks_for_pred_topk,
@@ -3232,11 +2768,9 @@ class Meta():
             top_name=top_name,
             topk_names=topk_names,
             
-            # 集成组合的结果
             ensemble_metrics_best=[ens_mae, ens_mse],
             individual_model_metrics=individual_metrics,
             
-            # 其他
             cross_dataset_performance=cross_dataset_perf,
             expanded_testset_selected_metrics=selected_script_metrics,
             test_dataset=self.test_dataset,
@@ -3247,9 +2781,7 @@ class Meta():
         
         logger.info(f"Results saved to: {save_path}")
         
-        # =================== 保存 Attention Weights（如果启用，Legacy 模式）===================
         if should_save_attention and attention_info is not None:
-            # 构建 legacy 模式的 attention 数据
             legacy_attn = {
                 'N_train': attention_info['N_train'],
                 'N_test': attention_info['N_test'],
@@ -3270,18 +2802,8 @@ class Meta():
                     k_folds=1,
                     training_mode='legacy_70_30_split',
                     
-                    # Attention 数据（legacy 模式只有一个模型）
-                    # 格式与 kfold 保持一致，使用 attention_data 字典
-                    # attention_data['legacy'] = {
-                    #   'N_train', 'N_test',
-                    #   'train_to_train': (num_layers, N_train, N_train) - TL block,
-                    #   'train_to_test': (num_layers, N_train, N_test) - TR block (通常被 mask),
-                    #   'test_to_train': (num_layers, N_test, N_train) - BL block,
-                    #   'test_to_test': (num_layers, N_test, N_test) - BR block,
-                    # }
                     attention_data={'legacy': legacy_attn},
                     
-                    # 测试集组件名称（用于分析）
                     test_component_names=np.array(self.name_components, dtype=object),
                 )
                 logger.info(f"Attention weights saved to: {attention_save_path}")
@@ -3297,7 +2819,6 @@ class Meta():
 
 
 if __name__ == "__main__":
-    # =================== 参数解析 ===================
     parser = argparse.ArgumentParser()
     parser.add_argument('--meta_feature_type', type=str, default='tabpfn_samplesdynamic_windowlen50_seed42')
     parser.add_argument('--clip_timestamps', type=lambda x: str(x).lower() == 'true', default=False)
@@ -3327,7 +2848,7 @@ if __name__ == "__main__":
     parser.add_argument('--meta_script_root', type=str, default='./meta/script',
                         help='Root directory for expanded testset scripts.')
 
-    # 新增超参数
+
     parser.add_argument('--lr', type=float, default=0.001, help='Learning rate for meta-learner')
     parser.add_argument('--d_model', type=int, default=64, help='Embedding dimension for meta-learner')
     parser.add_argument('--n_layers', type=int, default=3, help='Number of layers in meta-learner (MLP和ICL共用)')
@@ -3350,9 +2871,6 @@ if __name__ == "__main__":
     parser.add_argument('--suffix', type=str, default='',
                         help='Suffix to prepend to the result identifier (e.g. for marking experiments).')
 
-
-
-    # 新增：并行 K 折训练支持
     parser.add_argument('--fold_idx', type=int, default=None,
                         help='Run only the specified fold index (0-based). If not set, run all folds sequentially. '
                             'Use this to run different folds in parallel on different GPUs/terminals.')
@@ -3360,7 +2878,6 @@ if __name__ == "__main__":
                         help='If true, only ensemble from saved fold results without training. '
                             'Use this after all parallel fold trainings are complete.')
 
-    # 新增：ICL 变体控制
     parser.add_argument('--icl_shuffle', type=lambda x: str(x).lower() == 'true', default=False,
                         help='If true, shuffle training data before each epoch (for ICL full-batch training).')
     parser.add_argument('--icl_batch', type=lambda x: str(x).lower() == 'true', default=False,
@@ -3369,7 +2886,6 @@ if __name__ == "__main__":
                         help='If true, save attention weights from ICL models during testing for later analysis. '
                             'Attention weights will be saved to a separate *_attention.npz file.')
 
-    # 新增：组件控制参数
     parser.add_argument('--arg_component_balance', type=lambda x: str(x).lower() == 'true', default=False,
                         help='If true, balance the number of samples across datasets by random sampling.')
     parser.add_argument('--arg_add_GRU', type=lambda x: str(x).lower() == 'true', default=False,
@@ -3387,7 +2903,6 @@ if __name__ == "__main__":
 
     meta_feature_type = args.meta_feature_type
     clip_timestamps = args.clip_timestamps
-    # line 139 to change timestamps
     read_results_root = args.read_results_root
     write_results_root = args.write_results_root
     enable_ensemble = args.enable_ensemble
@@ -3401,10 +2916,8 @@ if __name__ == "__main__":
     plot_dir_base = os.path.join(f'meta/result_plots', meta_feature_type)
     os.makedirs(plot_dir_base, exist_ok=True)
 
-    # 设置全局随机种子
     set_seed(args.seed)
 
-    # 构建实验设置标识符
     fold_suffix = f"-fold_{args.fold_idx}" if args.fold_idx is not None else ""
     ensemble_only_suffix = "-ensemble_only" if args.ensemble_only else ""
     exp_setting_id = (
@@ -3505,18 +3018,14 @@ if __name__ == "__main__":
             
         logger.info(f"Performance plots saved to {save_dir}")
 
-    # 配置日志：同时输出到文件和控制台
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
 
-    # 清除已有的handler（避免重复添加）
     if logger.hasHandlers():
         logger.handlers.clear()
 
-    # 日志格式
     log_format = logging.Formatter('%(asctime)s - %(message)s')
 
-    # 文件handler - 使用简短的文件名（模型类型 + 哈希）避免文件名过长错误
     import hashlib
     exp_setting_hash = hashlib.md5(exp_setting_id.encode()).hexdigest()[:12]
     log_filename = f'meta/logfiles/meta_{args.meta_feature_type}_{args.meta_model_type}_{exp_setting_hash}.log'
@@ -3525,7 +3034,6 @@ if __name__ == "__main__":
     file_handler.setFormatter(log_format)
     logger.addHandler(file_handler)
 
-    # 控制台handler
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(log_format)
@@ -3536,7 +3044,6 @@ if __name__ == "__main__":
     logger.info(f"CUDA version: {torch.version.cuda}")
     logger.info(f"NumPy version: {np.__version__}")
 
-    # 创建Meta对象
     meta = Meta(
         seed=args.seed,
         read_results_root=read_results_root,
@@ -3568,21 +3075,17 @@ if __name__ == "__main__":
     )
 
     task_name = 'LTF'
-    # 从命令行参数读取组件控制变量
     if args.arg_add_LLM or args.arg_add_TSFM:
         datasets = ['ETTh1', 'ETTh2', 'Exchange', 'ili']
     else:
         datasets = sorted([_ for _ in os.listdir('./results_long_term_forecasting/resultsGym_MLP')])
-    #  不要nyse和nasdaq了
     datasets = [_ for _ in datasets if _ not in ['nyse','nasdaq']]
     if 'part-datasets' in args.suffix:
         datasets = ['ECL','ETTh1','ETTh2','ETTm1','ETTm2','traffic','weather']
     if 'dropECLtraffic' in args.suffix:
         datasets = ['Exchange','ETTh2','ETTm1','ETTm2','weather','ETTh1','ili']
 
-    # =================== 主训练循环 ===================
     def run_components_processing(test_dataset, pred_len_1, pred_len_2):
-        """执行数据处理"""
         meta.components_processing(
             task_name=task_name,
             datasets=datasets,
@@ -3600,7 +3103,6 @@ if __name__ == "__main__":
         )
 
     def run_training_step():
-        """执行训练步骤（不包含数据处理）"""
         results = None
         if args.meta_model_type == 'baseline-nn':
             logger.info("Running Baseline: Nearest Neighbor (no training)")
@@ -3625,7 +3127,6 @@ if __name__ == "__main__":
         return results
 
     def run_training(test_dataset, pred_len_1, pred_len_2):
-        """执行单次完整的数据处理和训练"""
         run_components_processing(test_dataset, pred_len_1, pred_len_2)
         results = run_training_step()
         
@@ -3640,22 +3141,16 @@ if __name__ == "__main__":
         return results
 
     def run_all_periods_mode(test_dataset):
-        """
-        arg_all_periods=True 模式：
-        训练集包含所有 pred_len，只训练一次，然后对每个 pred_len 的测试集分别评估
-        """
         logger.info(f"[arg_all_periods=True] Training once for {test_dataset}, then evaluating on each pred_len")
         
-        trained_fold_results = None  # 保存训练好的模型状态 (for kfold mode)
-        trained_legacy_model_state = None  # 保存训练好的模型状态 (for legacy mode)
+        trained_fold_results = None 
+        trained_legacy_model_state = None
         pred_lens = list(zip([96, 192, 336, 720], [24, 36, 48, 60]))
         
         for idx, (pred_len_1, pred_len_2) in enumerate(pred_lens):
-            # 处理数据（更新测试集为当前 pred_len）
             run_components_processing(test_dataset, pred_len_1, pred_len_2)
             
             if idx == 0:
-                # 第一个 pred_len：完整训练 + 测试
                 logger.info(f"[arg_all_periods=True] Training with pred_len={pred_len_1}/{pred_len_2}")
                 results = run_training_step()
                 
@@ -3664,7 +3159,6 @@ if __name__ == "__main__":
                     trained_legacy_model_state = copy.deepcopy(meta.model.state_dict())
                     logger.info(f"[arg_all_periods=True] Model trained (legacy), saved model state")
             else:
-                # 后续 pred_len：只使用已训练模型进行评估
                 logger.info(f"[arg_all_periods=True] Evaluating with pred_len={pred_len_1}/{pred_len_2} (using trained models)")
                 
                 if args.meta_model_type == 'baseline-nn':
@@ -3673,13 +3167,9 @@ if __name__ == "__main__":
                     results = meta.meta_fit_baseline_nn_dataset_ensemble(topk_datasets=3)
                 elif args.meta_model_type == 'baseline-nn-componentsensemble':
                     results = meta.meta_fit_baseline_nn_components_ensemble(topk_components=5)
-#                 elif args.use_kfold and trained_fold_results is not None:
-#                     results = meta.evaluate_with_trained_models(trained_fold_results)
                 elif not args.use_kfold and trained_legacy_model_state is not None:
-                    # Legacy mode: reload the saved model and run prediction
                     meta.meta_init()  # Reinitialize model structure
                     meta.model.load_state_dict(trained_legacy_model_state)
-                    # Run prediction on the new test set (meta_predict handles this)
                     results = meta._evaluate_legacy_with_trained_model(trained_legacy_model_state)
                 else:
                     logger.warning(f"Skipping evaluation for pred_len={pred_len_1}/{pred_len_2}: no trained models available")
@@ -3690,10 +3180,8 @@ if __name__ == "__main__":
     for test_dataset in datasets:
 
         if args.arg_all_periods:
-            # 优化模式：训练一次，评估四次
             run_all_periods_mode(test_dataset)
         else:
-            # 标准模式：每个 pred_len 分别训练
             for pred_len_1, pred_len_2 in zip([96, 192, 336, 720], [24, 36, 48, 60]):
 
                 logger.info(f"[Standard mode] Training for {test_dataset} with pred_len_1={pred_len_1}, pred_len_2={pred_len_2}")

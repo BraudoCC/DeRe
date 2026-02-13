@@ -54,8 +54,6 @@ class PatchingHead_CD(nn.Module):
         return x
 
 def calculate_patch_num(seq_len, patch_len=8):
-    # 原本stride=1, 例如seq_len=60会产生60-patch_len+1个patches, 高度overlapped
-    # 现在stride=patch_len, 产生的是non-overlapped patches
     stride = patch_len
     padding = patch_len - seq_len % patch_len if seq_len % patch_len != 0 else 0
     patch_num = int((seq_len + padding - patch_len) / stride + 1)
@@ -166,7 +164,6 @@ class TSFM(nn.Module):
         self.network_architecture = network_architecture
 
         if network_architecture == 'TSFM-Timer':
-            # Timer里面的decoder实际上是encoder
             self.encoder = Encoder(attn_layers=[EncoderLayer(AttentionLayer(FullAttention(configs=configs,
                                                                                         mask_flag=False,
                                                                                         factor=configs.factor,
@@ -186,7 +183,6 @@ class TSFM(nn.Module):
             if frozen:
                 # frozen attention weights
                 for name, param in self.encoder.named_parameters():
-                    # 只finetune attention layer中的layer norm仿射变换的参数
                     if 'attn_layers' in name and 'norm' not in name:
                         param.requires_grad = False
             else:
@@ -233,9 +229,7 @@ class TSFM(nn.Module):
             raise NotImplementedError
         return x, None
 
-# Update 20251109 cc: 重构模型框架，将各个模块解耦方便后续扩展
-# Update 20251226 ls:增加rag组件
-# Update 20251218 cc: 加入回归任务
+
 def get_q_mat_path(seqlen, predlen, dataset_name, configs=None):
     if 'm4' in dataset_name.lower() or (configs and 'm4' in str(configs.data).lower()):
         freq_str = 'Daily' # Default fallback
@@ -332,7 +326,7 @@ class Model(nn.Module):
         else:
             raise NotImplementedError
         
-        if self.series_sampling: # series normalization有可学习参数
+        if self.series_sampling:
             if self.gym_series_norm == 'DishTS':
                 self.series_norm = nn.ModuleList([DishTS(self.configs, seq_len=self.seq_len // (self.configs.down_sampling_window ** i)) 
                                                   for i in range(self.configs.down_sampling_layers + 1)])
@@ -360,18 +354,18 @@ class Model(nn.Module):
                 if self.gym_network_architecture in ['GRU', 'MLP']:
                     self.enc_embedding = DataEmbedding_wo_pos(1, self.configs.d_model, self.configs.embed, self.configs.freq, self.configs.dropout)
                     self.dec_embedding = None if self.gym_encoder_only else DataEmbedding_wo_pos(
-                        1, self.configs.d_model, self.configs.embed, self.configs.freq, self.configs.dropout) # encoder only时为None节省显存
+                        1, self.configs.d_model, self.configs.embed, self.configs.freq, self.configs.dropout)
                 else:
                     self.enc_embedding = DataEmbedding(1, self.configs.d_model, self.configs.embed, self.configs.freq, self.configs.dropout)
                     self.dec_embedding = None if self.gym_encoder_only else DataEmbedding(
-                        1, self.configs.d_model, self.configs.embed, self.configs.freq, self.configs.dropout) # encoder only时为None节省显存
-                self.enc_embedding_S = self.seq_len # enc_in tensor 的三元组的中间维度
+                        1, self.configs.d_model, self.configs.embed, self.configs.freq, self.configs.dropout)
+                self.enc_embedding_S = self.seq_len 
                 
                 if self.series_sampling: # CI + series-encoding + series-sampling
                     self.enc_embedding = nn.ModuleList(deepcopy(self.enc_embedding) for i in range(self.configs.down_sampling_layers + 1))
                     self.dec_embedding = None if self.gym_encoder_only else nn.ModuleList(deepcopy(self.dec_embedding) 
                                                                                           for i in range(self.configs.down_sampling_layers + 1))
-                    self.enc_embedding_S = self.sampling_seqlen # enc_in tensor 的三元组的中间维度
+                    self.enc_embedding_S = self.sampling_seqlen 
             elif self.gym_input_embed == 'series-patching': # CI + series-patching
                 stride, padding, self.patch_num, patch_len = calculate_patch_num(self.configs.seq_len)
                 if self.gym_network_architecture in ['GRU','MLP']:
@@ -384,7 +378,7 @@ class Model(nn.Module):
                                                         padding=padding, dropout=self.configs.dropout)
                     self.dec_embedding = None if self.gym_encoder_only else PatchEmbedding(d_model=self.configs.d_model, patch_len=patch_len, 
                                                                                            stride=stride, padding=padding, dropout=self.configs.dropout)
-                self.enc_embedding_S = self.patch_num # enc_in tensor 的三元组的中间维度
+                self.enc_embedding_S = self.patch_num 
                 
                 if self.series_sampling: # CI + series-patching + series-sampling
                     self.enc_embedding = torch.nn.ModuleList()
@@ -743,9 +737,9 @@ class Model(nn.Module):
         if self.gym_channel_independent:
             if self.gym_input_embed == 'series-encoding': # CI + series-encoding
                 self.decoder_projection = nn.Linear(self.configs.d_model, 1, bias=True) # (B*C, S, d_model) -> (B*C, S, 1)
-                if self.task_name == 'long_term_forecast' or self.task_name == 'short_term_forecast': # 预测任务
+                if self.task_name == 'long_term_forecast' or self.task_name == 'short_term_forecast': 
                     self.head = nn.Linear(self.configs.seq_len, self.configs.pred_len) # (B, C, S) -> (B, C, pred_len)
-                elif self.task_name == 'anomaly_detection' or self.task_name == 'imputation': # 异常检测/插补 做重构任务
+                elif self.task_name == 'anomaly_detection' or self.task_name == 'imputation': 
                     # TODO：classification-based anomaly detection
                     self.head = nn.Linear(self.configs.seq_len, self.configs.seq_len) # (B, C, S) -> (B, C, S)
                 elif self.task_name == 'classification':
@@ -761,8 +755,8 @@ class Model(nn.Module):
                 # CI + series-encoding + series-sampling
                 if self.gym_series_sampling:
                     self.decoder_projection = nn.ModuleList(nn.Linear(self.configs.d_model, 1, bias=True)
-                                              for i in range(self.configs.down_sampling_layers + 1)) # decoder_projection只有在series-encoding下才有意义
-                    if self.task_name == 'long_term_forecast' or self.task_name == 'short_term_forecast': # 预测任务
+                                              for i in range(self.configs.down_sampling_layers + 1))
+                    if self.task_name == 'long_term_forecast' or self.task_name == 'short_term_forecast': 
                         self.head = torch.nn.ModuleList(
                         [
                             torch.nn.Linear(
@@ -771,7 +765,7 @@ class Model(nn.Module):
                             )
                             for i in range(self.configs.down_sampling_layers + 1)
                         ])
-                    elif self.task_name == 'anomaly_detection' or self.task_name == 'imputation': # 异常检测/插补 做重构任务
+                    elif self.task_name == 'anomaly_detection' or self.task_name == 'imputation': 
                         # TODO：classification-based anomaly detection
                         self.head = torch.nn.ModuleList(
                         [
@@ -852,7 +846,7 @@ class Model(nn.Module):
                 # output head
                 if self.task_name == 'long_term_forecast' or self.task_name == 'short_term_forecast':
                     self.head = nn.Linear(self.configs.seq_len, self.configs.pred_len) # (B, C, S) -> (B, C, pred_len)
-                elif self.task_name == 'anomaly_detection' or self.task_name == 'imputation': # 异常检测/插补 做重构任务
+                elif self.task_name == 'anomaly_detection' or self.task_name == 'imputation': 
                     self.head = nn.Linear(self.configs.seq_len, self.configs.seq_len) # (B, C, S) -> (B, C, S)
                 elif self.task_name == 'classification':
                     self.head = nn.Sequential(
@@ -906,7 +900,7 @@ class Model(nn.Module):
                 self.decoder_projection = None
                 if self.task_name == 'long_term_forecast' or self.task_name == 'short_term_forecast':
                     self.head = nn.Linear(self.configs.d_model, self.configs.pred_len, bias=True) # (B, C, d_model) -> (B, C, pred_len)
-                elif self.task_name == 'anomaly_detection' or self.task_name == 'imputation': # 异常检测/插补 做重构任务
+                elif self.task_name == 'anomaly_detection' or self.task_name == 'imputation':
                     self.head = nn.Linear(self.configs.d_model, self.configs.seq_len, bias=True) # (B, C, d_model) -> (B, C, S)
                 elif self.task_name == 'classification':
                     self.head = nn.Sequential(
@@ -930,7 +924,7 @@ class Model(nn.Module):
                         nn.GELU(),
                         nn.Linear(self.configs.d_ff, self.pred_len)
                     )
-                elif self.task_name == 'anomaly_detection' or self.task_name == 'imputation': # 异常检测/插补 做重构任务
+                elif self.task_name == 'anomaly_detection' or self.task_name == 'imputation':
                     self.head = nn.Sequential(
                         nn.Linear(self.configs.d_model, self.seq_len * self.configs.d_model),
                         nn.Linear(self.seq_len * self.configs.d_model, self.configs.d_ff),
@@ -946,7 +940,7 @@ class Model(nn.Module):
                 else:
                     raise NotImplementedError
                 if self.gym_series_sampling:
-                    if self.task_name == 'long_term_forecast' or self.task_name == 'short_term_forecast': # 预测任务
+                    if self.task_name == 'long_term_forecast' or self.task_name == 'short_term_forecast':
                         self.decoder_projection = nn.Linear(self.configs.d_model, self.pred_len * self.configs.d_model)
                         self.head = torch.nn.ModuleList(
                         [
@@ -957,7 +951,7 @@ class Model(nn.Module):
                             )
                             for i in range(self.configs.down_sampling_layers + 1)
                         ])
-                    elif self.task_name == 'anomaly_detection' or self.task_name == 'imputation': # 异常检测/插补 做重构任务
+                    elif self.task_name == 'anomaly_detection' or self.task_name == 'imputation':
                         # TODO：classification-based anomaly detection
                         self.head = torch.nn.ModuleList(
                         [
@@ -1043,7 +1037,7 @@ class Model(nn.Module):
                 seq_len=self.seq_len,
                 pred_len=self.pred_len,
                 channels=self.configs.enc_in,
-                n_period=self.configs.n_period, # 与多尺度解耦
+                n_period=self.configs.n_period,
                 topm=self.configs.topm,
                 channel_independence=self.gym_channel_independent
             )
@@ -1116,7 +1110,6 @@ class Model(nn.Module):
 
     def fetch_batch(self, index, mode):
         """
-        根据 index 获取当前 batch 的检索特征
         """
         # 注意：为了节省显存，大字典通常存在 CPU 上，取 batch 时再移到 GPU
         # 假设缓存的维度是 [G, Total_Samples, P, C]
